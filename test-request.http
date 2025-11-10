@@ -1,0 +1,35 @@
+### Sağlık Kontrolü
+GET http://localhost:3000/api/health
+
+###
+
+### Excel Okuma Testi (Sadece Validasyon)
+POST http://localhost:3000/api/read-excel
+Content-Type: application/json
+
+{
+  "url": "https://idm.eu1.inforcloudsuite.com/ca/api/resources/FPLM_Document-90028-2-LATEST?$token=AXYs8RFhYgGkV6uNE6iokfkIGHZDNn%2FpiA%2B4%2FBaGgzh%2BMWbsPAH9jUYm3D022KbhliCne6y6GJuLHVyi6exFs66mFSaatxjbVb%2B9tZmOcY9TpjdJR%2F%2FrLUJywoxWgrL7Okb73MBBbUP6revkf9f1n75%2B9BQyIdQ%2BM8LYlI5sQORlNgonSAVZwwRSt3q%2BMLh%2BqELtQWPxeL5%2BgXu4Iso3LtXcYysZAtwcXdBkHJkcsIBW%2Fj4iy0NH4M%2FsBsfQuMKf12zIz1xCuEbfkO5hadK7SX369YvQBomorJfa%2BTlhpMCUyKDtXEN7tkuYYkGewswxV6mWQ%2FW1578jNNtHnOfW%2F3eP8bnHOCdentGZJW4GcJ09lRH1k5VnzgAYVEuESGZvkuE74K8VNVy%2Fx8zmwKlTVVeXv86tS0RPOO%2B62Uk70U4FSl2sMpa%2F6f1Jaq%2B5GIAv&$tenant=JKARFH4LCGZA78A5_PRD"
+}
+
+###
+
+### Excel + PLM Eşleştirme (Sadece Eşleştirme)
+POST http://localhost:3000/api/process-excel-with-plm
+Content-Type: application/json
+
+{
+  "url": "https://idm.eu1.inforcloudsuite.com/ca/api/resources/FPLM_Document-90028-2-LATEST?$token=AXYs8RFhYgGkV6uNE6iokfkIGHZDNn%2FpiA%2B4%2FBaGgzh%2BMWbsPAH9jUYm3D022KbhliCne6y6GJuLHVyi6exFs66mFSaatxjbVb%2B9tZmOcY9TpjdJR%2F%2FrLUJywoxWgrL7Okb73MBBbUP6revkf9f1n75%2B9BQyIdQ%2BM8LYlI5sQORlNgonSAVZwwRSt3q%2BMLh%2BqELtQWPxeL5%2BgXu4Iso3LtXcYysZAtwcXdBkHJkcsIBW%2Fj4iy0NH4M%2FsBsfQuMKf12zIz1xCuEbfkO5hadK7SX369YvQBomorJfa%2BTlhpMCUyKDtXEN7tkuYYkGewswxV6mWQ%2FW1578jNNtHnOfW%2F3eP8bnHOCdentGZJW4GcJ09lRH1k5VnzgAYVEuESGZvkuE74K8VNVy%2Fx8zmwKlTVVeXv86tS0RPOO%2B62Uk70U4FSl2sMpa%2F6f1Jaq%2B5GIAv&$tenant=JKARFH4LCGZA78A5_PRD"
+}
+
+###
+
+### TAM İŞLEM: Excel → PLM Eşleştirme → PLM'e Yazma 🚀⭐
+POST http://localhost:3000/api/process-and-write-to-plm
+Content-Type: application/json
+
+{
+  "url": "https://idm.eu1.inforcloudsuite.com/ca/api/resources/FPLM_Document-90028-2-LATEST?$token=AQru9Qpm7RmBI4dwFmN4UJ4RDTBNrkbFQoy%2BcbmId3akrvOO7SDW2fXn%2B%2BCRKoi3prrpwXs7vszQFQ2%2FspjHv2AVv4dADJusc%2F4FBgq9LMKIBQOA62dgOCygueM5DiSDf2iqFmP5VpRaXScn7Yxd%2B%2BurYBto1heGphMxpRvsXWApJVChd9yxBg8G45k2ai1YbuT2cvFsg%2BG6xWuB9PBEANgFwjwYdnkiJal4UFdsBk%2BSBJGNIXaJzLVXMxTXZajhjQHpSsbIWbkLGHTVT%2Bihv5VJta1ZkDaw67LAFMLIE52Wcf%2F%2FQSWwEcch2qGZQ%2FY6uW7eAWeF9b%2BKY%2F%2BEK2OFeeE0jRbayZ9uzlAFencP8fjNK%2F73tgY88b%2FeBQAortwutw%2F%2F%2BcSRVLFCVeEA3%2BLnPeAqGSXpZ6HqEPmd%2BL0MjFvjKTVVBMrM4zIKGNUlY2Kb&$tenant=JKARFH4LCGZA78A5_PRD"
+}
+
+###
+
