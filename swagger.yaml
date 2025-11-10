@@ -1,0 +1,359 @@
+openapi: 3.0.0
+info:
+  title: TrimSKUOpener API
+  version: 1.0.0
+  description: Excel verilerini okuyup PLM sistemine TrimSKU yazan ve barkod atayan API
+  contact:
+    name: API Support
+
+servers:
+  - url: https://trimskuopener-4b8505224c7d.herokuapp.com
+    description: Production server (Heroku)
+  - url: http://localhost:3000
+    description: Development server
+
+tags:
+  - name: Home
+    description: Ana sayfa endpoints
+  - name: Health Check
+    description: Sağlık kontrolü endpoints
+  - name: Excel Processing
+    description: Excel işleme ve PLM entegrasyonu
+
+paths:
+  /:
+    get:
+      summary: Ana Sayfa
+      description: API ana sayfası - Swagger dokümantasyonuna yönlendirir
+      tags:
+        - Home
+      responses:
+        '200':
+          description: API bilgileri
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: TrimSKUOpener API - Excel to PLM Data Processor
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  documentation:
+                    type: string
+                    example: /api-docs
+                  swagger:
+                    type: string
+                    example: https://trimskuopener-4b8505224c7d.herokuapp.com/api-docs
+
+  /api/health:
+    get:
+      summary: Sağlık Kontrolü
+      description: API'nin çalışır durumda olup olmadığını kontrol eder
+      tags:
+        - Health Check
+      responses:
+        '200':
+          description: API çalışıyor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: API çalışıyor
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2025-11-10T14:30:00.000Z"
+
+  /api/process-and-write-to-plm:
+    post:
+      summary: Excel'den PLM'e Tam İşlem
+      description: |
+        Excel dosyasını URL'den okur, validasyon yapar, PLM ile eşleştirir, TrimSKU yaratır, SKU ID'lerini çeker ve barkodları atar.
+        
+        **İşlem Adımları:**
+        1. Excel URL'den okunur
+        2. Başlık ve zorunlu alan validasyonu yapılır
+        3. PLM ile eşleştirme (Trim/Renk/Beden → ID'ler)
+        4. PLM'e TrimSKU yaratılır
+        5. Yaratılan SKU'ların ID'leri çekilir
+        6. Excel satırları SKU ID'leri ile eşleştirilir
+        7. Her SKU'ya barkod atanır
+        
+        **Excel Formatı (Zorunlu Başlıklar):**
+        - `Trim Kodu` (Zorunlu)
+        - `Renk Kodu` (Zorunlu)
+        - `Beden Kodu` (Opsiyonel)
+        - `YeniEge Barkod` (Zorunlu)
+      tags:
+        - Excel Processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExcelRequest'
+            examples:
+              example1:
+                summary: Örnek Excel URL
+                value:
+                  url: "https://idm.eu1.inforcloudsuite.com/ca/api/resources/FPLM_Document-90028-2-LATEST?$token=..."
+      responses:
+        '200':
+          description: İşlem başarılı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Başarılı İşlem
+                  value:
+                    success: true
+                    message: "Excel verisi başarıyla işlendi, PLM'e yazıldı, SKU ID'leri alındı ve barkodlar atandı"
+                    data:
+                      excel:
+                        totalRows: 9
+                        processedRows: 9
+                      plm:
+                        totalTrims: 1
+                        successfulTrims: 1
+                        failedTrims: 0
+                        results:
+                          - trimId: 1558
+                            trimCode: "TRFED00069"
+                            skuCount: 9
+                      skus:
+                        totalSKUs: 37
+                        matchedRows: 9
+                      barcodes:
+                        total: 9
+                        successful: 9
+                        failed: 0
+        '400':
+          description: Validasyon hatası veya eksik bilgi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingHeaders:
+                  summary: Eksik Başlık Hatası
+                  value:
+                    success: false
+                    message: "Eksik başlık"
+                    missingHeaders: ["Trim Kodu"]
+                emptyFields:
+                  summary: Boş Alan Hatası
+                  value:
+                    success: false
+                    message: "Lütfen eksik bilgileri doldurunuz"
+                    errors:
+                      - row: 2
+                        emptyFields: ["Trim Kodu", "Renk Kodu"]
+        '500':
+          description: Sunucu hatası
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: Sunucu Hatası
+                  value:
+                    success: false
+                    message: "İşlem sırasında bir hata oluştu"
+                    error: "Request failed with status code 500"
+
+components:
+  schemas:
+    ExcelRequest:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          description: Excel dosyasının URL'si (token içerebilir)
+          example: "https://idm.eu1.inforcloudsuite.com/ca/api/resources/FPLM_Document-90028-2-LATEST?$token=..."
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Excel verisi başarıyla işlendi, PLM'e yazıldı, SKU ID'leri alındı ve barkodlar atandı"
+        data:
+          type: object
+          properties:
+            excel:
+              type: object
+              properties:
+                totalRows:
+                  type: integer
+                  example: 9
+                  description: Excel'deki toplam satır sayısı
+                processedRows:
+                  type: integer
+                  example: 9
+                  description: İşlenen satır sayısı
+            plm:
+              type: object
+              properties:
+                totalTrims:
+                  type: integer
+                  example: 1
+                  description: İşlenen toplam Trim sayısı
+                successfulTrims:
+                  type: integer
+                  example: 1
+                  description: Başarıyla yazılan Trim sayısı
+                failedTrims:
+                  type: integer
+                  example: 0
+                  description: Hatalı Trim sayısı
+                results:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      trimId:
+                        type: integer
+                        example: 1558
+                      trimCode:
+                        type: string
+                        example: "TRFED00069"
+                      skuCount:
+                        type: integer
+                        example: 9
+                        description: Bu Trim için yaratılan SKU sayısı
+            skus:
+              type: object
+              properties:
+                totalSKUs:
+                  type: integer
+                  example: 37
+                  description: PLM'de bulunan toplam SKU sayısı
+                matchedRows:
+                  type: integer
+                  example: 9
+                  description: Excel ile eşleştirilen SKU sayısı
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      rowNumber:
+                        type: integer
+                        example: 2
+                      excelData:
+                        type: object
+                        properties:
+                          trimCode:
+                            type: string
+                            example: "TRFED00069"
+                          colorCode:
+                            type: string
+                            example: "039TY"
+                          sizeCode:
+                            type: string
+                            example: "10.5cm"
+                          barcode:
+                            type: string
+                            example: "YeniEge1"
+                      plmData:
+                        type: object
+                        properties:
+                          trimId:
+                            type: integer
+                            example: 1558
+                          trimColorwayId:
+                            type: integer
+                            example: 7680
+                          sizeId:
+                            type: integer
+                            example: 118
+                          skuId:
+                            type: integer
+                            example: 76
+                            description: Yaratılan SKU'nun ID'si
+            barcodes:
+              type: object
+              properties:
+                total:
+                  type: integer
+                  example: 9
+                  description: Toplam barkod atama sayısı
+                successful:
+                  type: integer
+                  example: 9
+                  description: Başarılı barkod atama sayısı
+                failed:
+                  type: integer
+                  example: 0
+                  description: Hatalı barkod atama sayısı
+                results:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      rowNumber:
+                        type: integer
+                        example: 2
+                      skuId:
+                        type: integer
+                        example: 76
+                      barcode:
+                        type: string
+                        example: "YeniEge1"
+                      status:
+                        type: string
+                        enum: [success, failed]
+                        example: success
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "İşlem sırasında bir hata oluştu"
+        error:
+          type: string
+          example: "Hata detayı"
+        missingHeaders:
+          type: array
+          items:
+            type: string
+          description: Eksik başlıklar (validasyon hatası durumunda)
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+                description: Hatalı satır numarası
+              emptyFields:
+                type: array
+                items:
+                  type: string
+                description: Boş olan zorunlu alanlar
+          description: Detaylı hata listesi (validasyon hatası durumunda)
+

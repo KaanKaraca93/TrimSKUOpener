@@ -3,8 +3,11 @@ const cors = require('cors');
 const axios = require('axios');
 const XLSX = require('xlsx');
 const swaggerUi = require('swagger-ui-express');
-const swaggerSpec = require('./swagger');
+const YAML = require('yamljs');
 const plmService = require('./plm-service');
+
+// Load Swagger YAML
+const swaggerDocument = YAML.load('./swagger.yaml');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 // Swagger UI
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
   customCss: '.swagger-ui .topbar { display: none }',
   customSiteTitle: 'TrimSKUOpener API Docs'
 }));
