@@ -12,7 +12,7 @@ yarn-error.log*
 *~
 
 # PLM Config (contains credentials)
-plm-config.js
+# plm-config.js  -- Temporarily allowing for Heroku deployment
 
 # Test outputs
 last-payload.json
