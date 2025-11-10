@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const XLSX = require('xlsx');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger');
 const plmService = require('./plm-service');
 
 const app = express();
@@ -10,6 +12,12 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'TrimSKUOpener API Docs'
+}));
 
 // Gerekli başlıklar
 const REQUIRED_HEADERS = ['Trim Kodu', 'Renk Kodu', 'Beden Kodu', 'YeniEge Barkod'];
@@ -309,7 +317,61 @@ app.post('/api/process-excel-with-plm', async (req, res) => {
   }
 });
 
-// Excel + PLM Eşleştirme + PLM'e Yazma (TAM İŞLEM)
+/**
+ * @swagger
+ * /api/process-and-write-to-plm:
+ *   post:
+ *     summary: Excel'den PLM'e Tam İşlem
+ *     description: |
+ *       Excel dosyasını URL'den okur, validasyon yapar, PLM ile eşleştirir, TrimSKU yaratır, SKU ID'lerini çeker ve barkodları atar.
+ *       
+ *       **İşlem Adımları:**
+ *       1. Excel URL'den okunur
+ *       2. Başlık ve zorunlu alan validasyonu yapılır
+ *       3. PLM ile eşleştirme (Trim/Renk/Beden → ID'ler)
+ *       4. PLM'e TrimSKU yaratılır
+ *       5. Yaratılan SKU'ların ID'leri çekilir
+ *       6. Excel satırları SKU ID'leri ile eşleştirilir
+ *       7. Her SKU'ya barkod atanır
+ *       
+ *       **Excel Formatı:**
+ *       - `Trim Kodu` (Zorunlu)
+ *       - `Renk Kodu` (Zorunlu)
+ *       - `Beden Kodu` (Opsiyonel)
+ *       - `YeniEge Barkod` (Zorunlu)
+ *     tags:
+ *       - Excel Processing
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ExcelRequest'
+ *           examples:
+ *             example1:
+ *               summary: Örnek Excel URL
+ *               value:
+ *                 url: "https://idm.eu1.inforcloudsuite.com/ca/api/resources/FPLM_Document-90028-2-LATEST?$token=..."
+ *     responses:
+ *       200:
+ *         description: İşlem başarılı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Validasyon hatası veya eksik bilgi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Sunucu hatası
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 app.post('/api/process-and-write-to-plm', async (req, res) => {
   try {
     const { url } = req.body;
@@ -513,7 +575,33 @@ app.post('/api/process-and-write-to-plm', async (req, res) => {
   }
 });
 
-// Sağlık kontrolü endpoint'i
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: Sağlık Kontrolü
+ *     description: API'nin çalışır durumda olup olmadığını kontrol eder
+ *     tags:
+ *       - Health Check
+ *     responses:
+ *       200:
+ *         description: API çalışıyor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: OK
+ *                 message:
+ *                   type: string
+ *                   example: TrimSKUOpener API çalışıyor
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                   example: "2025-11-10T14:30:00.000Z"
+ */
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
@@ -522,60 +610,54 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Root endpoint
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: Ana Sayfa
+ *     description: API ana sayfası - Swagger dokümantasyonuna yönlendirir
+ *     tags:
+ *       - Home
+ *     responses:
+ *       200:
+ *         description: API bilgileri
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: TrimSKUOpener API
+ *                 version:
+ *                   type: string
+ *                   example: "1.0.0"
+ *                 documentation:
+ *                   type: string
+ *                   example: /api-docs
+ */
 app.get('/', (req, res) => {
   res.json({
     success: true,
     message: 'TrimSKUOpener API - Excel to PLM Data Processor',
     version: '1.0.0',
+    documentation: '/api-docs',
+    swagger: 'https://trimskuopener-4b8505224c7d.herokuapp.com/api-docs',
     endpoints: {
-      health: {
-        method: 'GET',
-        path: '/api/health',
-        description: 'API sağlık kontrolü'
-      },
-      readExcel: {
-        method: 'POST',
-        path: '/api/read-excel',
-        description: 'Excel dosyasını URL\'den okur ve validasyon yapar',
-        body: { url: 'string' },
-        requiredHeaders: ['Trim Kodu', 'Renk Kodu', 'Beden Kodu', 'YeniEge Barkod'],
-        mandatoryFields: ['Trim Kodu', 'Renk Kodu', 'YeniEge Barkod']
-      },
-      processExcelWithPLM: {
-        method: 'POST',
-        path: '/api/process-excel-with-plm',
-        description: '✨ Excel okuma + Validasyon + PLM eşleştirme',
-        body: { url: 'string' },
-        process: [
-          '1. Excel dosyasını URL\'den indir ve oku',
-          '2. Başlık ve zorunlu alan validasyonu yap',
-          '3. Trim Kodu → TrimId',
-          '4. Renk Kodu → TrimColorwayId',
-          '5. Beden Kodu → SizeId (opsiyonel)'
-        ]
-      },
-      processAndWriteToPLM: {
-        method: 'POST',
-        path: '/api/process-and-write-to-plm',
-        description: '🚀 TAM İŞLEM: Excel → Validasyon → PLM Eşleştirme → PLM\'e TrimSKU Yazma',
-        body: { url: 'string' },
-        process: [
-          '1. Excel dosyasını URL\'den indir ve oku',
-          '2. Başlık ve zorunlu alan validasyonu',
-          '3. PLM ile eşleştirme (Trim, Color, Size)',
-          '4. TrimSKU\'ları PLM\'e yazma'
-        ]
-      }
+      health: 'GET /api/health',
+      fullProcess: 'POST /api/process-and-write-to-plm'
     }
   });
 });
 
 // Server'ı başlat
 app.listen(PORT, () => {
+  console.log('='.repeat(70));
   console.log(`🚀 Server ${PORT} portunda çalışıyor`);
   console.log(`📍 http://localhost:${PORT}`);
+  console.log(`📚 Swagger UI: http://localhost:${PORT}/api-docs`);
   console.log(`💚 Sağlık kontrolü: http://localhost:${PORT}/api/health`);
+  console.log('='.repeat(70));
 });
 
 module.exports = app;

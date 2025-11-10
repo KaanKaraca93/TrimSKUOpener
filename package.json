@@ -13,17 +13,22 @@
     "test:full": "node test-full-flow.js",
     "test:sku": "node test-sku-fetch.js"
   },
-  "keywords": ["excel", "plm", "api"],
+  "keywords": [
+    "excel",
+    "plm",
+    "api"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
     "axios": "^1.6.0",
-    "xlsx": "^0.18.5",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   }
 }
-
