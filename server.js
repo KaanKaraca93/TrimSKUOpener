@@ -775,10 +775,13 @@ app.post('/api/process-xml', async (req, res) => {
         }
 
         console.log('✅ PLM eşleştirme tamamlandı');
+        console.log('🔍 plmResult yapısı:', JSON.stringify(plmResult, null, 2));
         
         // Eşleştirilen verileri al
-        const matchedData = plmResult.data.results;
-        const unmatchedData = plmResult.data.errors;
+        const matchedData = plmResult.data?.results || [];
+        const unmatchedData = plmResult.data?.errors || [];
+        
+        console.log(`📊 Eşleştirilen: ${matchedData.length}, Eşleştirilememiş: ${unmatchedData.length}`);
 
         // PLM'e yaz (SKU oluştur)
         console.log('💾 ADIM 5: TrimSKU oluşturuluyor...');
@@ -811,8 +814,12 @@ app.post('/api/process-xml', async (req, res) => {
 
         // Excel verileri ile SKU'ları eşleştir
         console.log('🔗 ADIM 7: Excel verileri ile SKU\'lar eşleştiriliyor...');
-        const matchedSkus = plmService.matchExcelWithSKUs(matchedData, fetchSkusResult.data);
+        const matchSkuResult = plmService.matchExcelWithSKUs(matchedData, fetchSkusResult.data);
         console.log('✅ Eşleştirme tamamlandı');
+        
+        // Eşleştirilen SKU'ları al
+        const matchedSkus = matchSkuResult.data.matchedData;
+        console.log(`📊 ${matchedSkus.length} SKU barcode için hazır`);
 
         // Barcode'ları ata
         console.log('🏷️ ADIM 8: Barcode\'lar atanıyor...');
