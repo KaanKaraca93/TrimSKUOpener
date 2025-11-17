@@ -775,7 +775,6 @@ app.post('/api/process-xml', async (req, res) => {
         }
 
         console.log('✅ PLM eşleştirme tamamlandı');
-        console.log('🔍 plmResult yapısı:', JSON.stringify(plmResult, null, 2));
         
         // Eşleştirilen verileri al
         const matchedData = plmResult.data?.results || [];
@@ -854,14 +853,14 @@ app.post('/api/process-xml', async (req, res) => {
                 unmatchedRows: unmatchedData.length,
                 createdSKUs: writeResult.data.results.length,
                 failedSKUs: writeResult.data.errors.length,
-                assignedBarcodes: barcodeResult.results.filter(r => r.success).length,
-                failedBarcodes: barcodeResult.results.filter(r => !r.success).length
+                assignedBarcodes: barcodeResult.data.successful,
+                failedBarcodes: barcodeResult.data.failed
             },
             details: {
                 matched: matchedData,
                 unmatched: unmatchedData,
                 skuResults: writeResult.data.results,
-                barcodeResults: barcodeResult.results
+                barcodeResults: barcodeResult.data.results
             }
         });
 
