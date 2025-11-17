@@ -775,10 +775,14 @@ app.post('/api/process-xml', async (req, res) => {
         }
 
         console.log('✅ PLM eşleştirme tamamlandı');
+        
+        // Eşleştirilen verileri al
+        const matchedData = plmResult.data.results;
+        const unmatchedData = plmResult.data.errors;
 
         // PLM'e yaz (SKU oluştur)
         console.log('💾 ADIM 5: TrimSKU oluşturuluyor...');
-        const writeResult = await plmService.writeMatchedDataToPLM(plmResult.matchedData);
+        const writeResult = await plmService.writeMatchedDataToPLM(matchedData);
 
         if (!writeResult.success) {
             return res.status(500).json({
@@ -792,7 +796,7 @@ app.post('/api/process-xml', async (req, res) => {
 
         // Oluşturulan SKU'ların ID'lerini al
         console.log('🔎 ADIM 6: Oluşturulan SKU ID\'leri alınıyor...');
-        const trimIds = [...new Set(plmResult.matchedData.map(item => item.TrimId))];
+        const trimIds = [...new Set(matchedData.map(item => item.plmData.trimId))];
         const fetchSkusResult = await plmService.fetchCreatedSKUs(trimIds);
 
         if (!fetchSkusResult.success) {
@@ -807,7 +811,7 @@ app.post('/api/process-xml', async (req, res) => {
 
         // Excel verileri ile SKU'ları eşleştir
         console.log('🔗 ADIM 7: Excel verileri ile SKU\'lar eşleştiriliyor...');
-        const matchedSkus = plmService.matchExcelWithSKUs(plmResult.matchedData, fetchSkusResult.skus);
+        const matchedSkus = plmService.matchExcelWithSKUs(matchedData, fetchSkusResult.data);
         console.log('✅ Eşleştirme tamamlandı');
 
         // Barcode'ları ata
@@ -839,17 +843,17 @@ app.post('/api/process-xml', async (req, res) => {
             },
             summary: {
                 totalRows: jsonData.length,
-                matchedRows: plmResult.matchedData.length,
-                unmatchedRows: plmResult.unmatchedData.length,
-                createdSKUs: writeResult.results.filter(r => r.success).length,
-                failedSKUs: writeResult.results.filter(r => !r.success).length,
+                matchedRows: matchedData.length,
+                unmatchedRows: unmatchedData.length,
+                createdSKUs: writeResult.data.results.length,
+                failedSKUs: writeResult.data.errors.length,
                 assignedBarcodes: barcodeResult.results.filter(r => r.success).length,
                 failedBarcodes: barcodeResult.results.filter(r => !r.success).length
             },
             details: {
-                matched: plmResult.matchedData,
-                unmatched: plmResult.unmatchedData,
-                skuResults: writeResult.results,
+                matched: matchedData,
+                unmatched: unmatchedData,
+                skuResults: writeResult.data.results,
                 barcodeResults: barcodeResult.results
             }
         });
