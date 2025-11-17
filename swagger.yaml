@@ -19,6 +19,8 @@ tags:
     description: Sağlık kontrolü endpoints
   - name: Excel Processing
     description: Excel işleme ve PLM entegrasyonu
+  - name: XML Processing
+    description: XML ile Excel işleme ve PLM entegrasyonu
 
 paths:
   /:
@@ -175,6 +177,211 @@ paths:
                     success: false
                     message: "İşlem sırasında bir hata oluştu"
                     error: "Request failed with status code 500"
+
+  /api/process-xml:
+    post:
+      summary: XML'den PLM'e Tam İşlem
+      description: |
+        PLM'den gelen XML'i parse eder, içinden ItemID ve DocumentType çıkarır, PLM Document API ile gerçek Excel URL'ini alır ve normal Excel işleme flow'unu çalıştırır.
+        
+        **İşlem Adımları:**
+        1. XML parse edilir
+        2. AlternateDocumentID'den ITEMID çıkarılır (örn: /TrimBarcode[@ITEMID = "2"] → "2")
+        3. DocumentTypeID alınır (örn: "TrimBarcode")
+        4. PLM Document API ile gerçek Excel URL'i alınır
+        5. Excel URL'den okunur
+        6. Başlık ve zorunlu alan validasyonu yapılır
+        7. PLM ile eşleştirme (Trim/Renk/Beden → ID'ler)
+        8. PLM'e TrimSKU yaratılır
+        9. Yaratılan SKU'ların ID'leri çekilir
+        10. Excel satırları SKU ID'leri ile eşleştirilir
+        11. Her SKU'ya barkod atanır
+        
+        **XML Formatı:**
+        - `SyncContentDocument` root element
+        - `AlternateDocumentID/ID`: ITEMID içerir
+        - `DocumentMetaData/DocumentTypeID`: Document type (örn: TrimBarcode)
+        
+        **Excel Formatı (Zorunlu Başlıklar):**
+        - `Trim Kodu` (Zorunlu)
+        - `Renk Kodu` (Zorunlu)
+        - `Beden Kodu` (Opsiyonel)
+        - `YeniEge Barkod` (Zorunlu)
+      tags:
+        - XML Processing
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              type: string
+              example: |
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <SyncContentDocument xmlns="http://schema.infor.com/InforOAGIS/2">
+                  <ApplicationArea>
+                    <Sender>
+                      <LogicalID>lid://infor.daf.daf</LogicalID>
+                    </Sender>
+                    <CreationDateTime>2025-11-17T06:15:44.698Z</CreationDateTime>
+                  </ApplicationArea>
+                  <DataArea>
+                    <Sync>
+                      <ActionCriteria>
+                        <ActionExpression actionCode="Add"/>
+                      </ActionCriteria>
+                    </Sync>
+                    <ContentDocument>
+                      <DocumentID>
+                        <ID variationID="1763360144691">TrimBarcode-2-0-LATEST</ID>
+                      </DocumentID>
+                      <AlternateDocumentID>
+                        <ID>/TrimBarcode[@ITEMID = "2"]</ID>
+                      </AlternateDocumentID>
+                      <DocumentMetaData>
+                        <DocumentTypeID>TrimBarcode</DocumentTypeID>
+                      </DocumentMetaData>
+                    </ContentDocument>
+                  </DataArea>
+                </SyncContentDocument>
+      responses:
+        '200':
+          description: İşlem başarılı
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "XML işleme ve PLM yazma işlemi başarıyla tamamlandı"
+                  xmlInfo:
+                    type: object
+                    properties:
+                      itemId:
+                        type: string
+                        example: "2"
+                        description: XML'den çıkarılan Item ID
+                      docType:
+                        type: string
+                        example: "TrimBarcode"
+                        description: XML'den çıkarılan Document Type
+                      filename:
+                        type: string
+                        example: "TrimUpt.xlsx"
+                        description: Excel dosya adı
+                      documentKey:
+                        type: string
+                        example: "TrimBarcode-2-1-LATEST"
+                        description: PLM Document Key
+                  summary:
+                    type: object
+                    properties:
+                      totalRows:
+                        type: integer
+                        example: 9
+                        description: Excel'deki toplam satır sayısı
+                      matchedRows:
+                        type: integer
+                        example: 9
+                        description: PLM ile eşleştirilen satır sayısı
+                      unmatchedRows:
+                        type: integer
+                        example: 0
+                        description: Eşleştirilememiş satır sayısı
+                      createdSKUs:
+                        type: integer
+                        example: 9
+                        description: Yaratılan SKU sayısı
+                      failedSKUs:
+                        type: integer
+                        example: 0
+                        description: Hatalı SKU sayısı
+                      assignedBarcodes:
+                        type: integer
+                        example: 9
+                        description: Atanan barkod sayısı
+                      failedBarcodes:
+                        type: integer
+                        example: 0
+                        description: Hatalı barkod sayısı
+                  details:
+                    type: object
+                    description: Detaylı işlem sonuçları
+        '400':
+          description: Validasyon hatası veya eksik bilgi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Geçersiz XML formatı"
+                  details:
+                    type: string
+                    example: "AlternateDocumentID bulunamadı"
+              examples:
+                invalidXml:
+                  summary: Geçersiz XML
+                  value:
+                    success: false
+                    error: "Geçersiz XML formatı"
+                    details: "XML parse hatası"
+                missingItemId:
+                  summary: ITEMID Bulunamadı
+                  value:
+                    success: false
+                    error: "ITEMID AlternateDocumentID içinde bulunamadı"
+                    alternateDocId: "/TrimBarcode"
+                missingHeaders:
+                  summary: Eksik Excel Başlığı
+                  value:
+                    success: false
+                    error: "Eksik başlık(lar) tespit edildi"
+                    missingHeaders: ["Trim Kodu"]
+                emptyFields:
+                  summary: Boş Zorunlu Alan
+                  value:
+                    success: false
+                    error: "Lütfen eksik bilgileri doldurunuz"
+                    emptyFieldRows:
+                      - row: 2
+                        emptyFields: ["Trim Kodu"]
+        '500':
+          description: Sunucu hatası
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Document URL alınamadı"
+                  details:
+                    type: string
+                    example: "Request failed with status code 500"
+              examples:
+                documentError:
+                  summary: Document URL Hatası
+                  value:
+                    success: false
+                    error: "Document URL alınamadı"
+                    details: "Token alınamadı"
+                plmError:
+                  summary: PLM İşlem Hatası
+                  value:
+                    success: false
+                    error: "PLM eşleştirme hatası"
+                    details: "Request failed with status code 500"
 
 components:
   schemas:

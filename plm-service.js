@@ -652,6 +652,80 @@ async function assignBarcodesToSKUs(matchedData) {
     };
 }
 
+/**
+ * XML'den gelen Document ID ile gerçek Excel URL'ini alma
+ * @param {string} itemId - AlternateDocumentID'den çıkarılan Item ID (örn: "2")
+ * @param {string} docType - Document Type (örn: "TrimBarcode")
+ * @returns {object} - { success, url, filename, error }
+ */
+async function getDocumentUrl(itemId, docType) {
+    try {
+        console.log(`🔍 Document URL alınıyor: ItemID=${itemId}, DocType=${docType}`);
+        
+        // PLM Token al
+        const tokenResult = await getToken();
+        if (!tokenResult.success) {
+            return {
+                success: false,
+                error: 'Token alınamadı'
+            };
+        }
+
+        const token = tokenResult.token;
+        const docApiUrl = `${PLM_CONFIG.BASE_API_URL}/documents/api/document/doclib/items`;
+
+        const payload = {
+            itemIds: [itemId],
+            idmDocType: docType
+        };
+
+        console.log('📤 Document API Request:', docApiUrl);
+        console.log('📦 Payload:', JSON.stringify(payload, null, 2));
+
+        const response = await axios.post(
+            docApiUrl,
+            payload,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            }
+        );
+
+        if (response.data && response.data.documents && response.data.documents.length > 0) {
+            const doc = response.data.documents[0];
+            console.log('✅ Document URL alındı:', doc.filename);
+            
+            return {
+                success: true,
+                url: doc.url,
+                filename: doc.filename,
+                key: doc.key,
+                attributes: doc.attributes
+            };
+        } else {
+            console.error('❌ Document bulunamadı');
+            return {
+                success: false,
+                error: 'Document bulunamadı'
+            };
+        }
+
+    } catch (error) {
+        console.error('❌ Document URL alma hatası:', error.message);
+        if (error.response) {
+            console.error('   Status:', error.response.status);
+            console.error('   Data:', JSON.stringify(error.response.data, null, 2));
+        }
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
 module.exports = {
     getToken,
     getTrimsWithDetails,
@@ -660,6 +734,7 @@ module.exports = {
     writeMatchedDataToPLM,
     fetchCreatedSKUs,
     matchExcelWithSKUs,
-    assignBarcodesToSKUs
+    assignBarcodesToSKUs,
+    getDocumentUrl
 };
 

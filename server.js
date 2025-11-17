@@ -7,6 +7,7 @@ const axios = require('axios');
 const XLSX = require('xlsx');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
+const { XMLParser } = require('fast-xml-parser');
 const plmService = require('./plm-service');
 
 // Load Swagger YAML
@@ -18,6 +19,7 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.text({ type: 'application/xml' })); // XML desteği
 
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
@@ -617,6 +619,254 @@ app.get('/api/health', (req, res) => {
 });
 
 /**
+ * 4️⃣ XML İŞLEME VE PLM'E YAZMA ENDPOINTİ
+ * 
+ * XML'den ItemID ve DocType çıkarıp gerçek Excel URL'ini alır, sonra normal flow'u çalıştırır
+ */
+app.post('/api/process-xml', async (req, res) => {
+    try {
+        console.log('======================================================================');
+        console.log('📄 XML İŞLEME BAŞLADI');
+        console.log('🕐 Timestamp:', new Date().toISOString());
+        console.log('======================================================================');
+
+        // XML'i parse et
+        const xmlParser = new XMLParser({
+            ignoreAttributes: false,
+            attributeNamePrefix: '@_'
+        });
+        
+        let xmlData;
+        try {
+            // Body direkt string olarak geliyor (express.text middleware sayesinde)
+            const xmlString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+            xmlData = xmlParser.parse(xmlString);
+            console.log('✅ XML parse edildi');
+        } catch (parseError) {
+            console.error('❌ XML parse hatası:', parseError.message);
+            return res.status(400).json({
+                success: false,
+                error: 'Geçersiz XML formatı',
+                details: parseError.message
+            });
+        }
+
+        // AlternateDocumentID'den ITEMID çıkar
+        // Örnek: /TrimBarcode[@ITEMID = "2"] → "2"
+        const alternateDocId = xmlData?.SyncContentDocument?.DataArea?.ContentDocument?.AlternateDocumentID?.ID;
+        
+        if (!alternateDocId) {
+            return res.status(400).json({
+                success: false,
+                error: 'AlternateDocumentID bulunamadı'
+            });
+        }
+
+        console.log('📌 AlternateDocumentID:', alternateDocId);
+
+        // Regex ile ITEMID çıkar
+        const itemIdMatch = alternateDocId.match(/ITEMID\s*=\s*['"](.*?)['"]/);
+        if (!itemIdMatch || !itemIdMatch[1]) {
+            return res.status(400).json({
+                success: false,
+                error: 'ITEMID AlternateDocumentID içinde bulunamadı',
+                alternateDocId: alternateDocId
+            });
+        }
+
+        const itemId = itemIdMatch[1];
+        console.log('✅ ITEMID çıkarıldı:', itemId);
+
+        // DocumentTypeID'yi al (örn: "TrimBarcode")
+        const docType = xmlData?.SyncContentDocument?.DataArea?.ContentDocument?.DocumentMetaData?.DocumentTypeID;
+        
+        if (!docType) {
+            return res.status(400).json({
+                success: false,
+                error: 'DocumentTypeID bulunamadı'
+            });
+        }
+
+        console.log('✅ DocumentTypeID:', docType);
+
+        // PLM'den gerçek Excel URL'ini al
+        console.log('📡 PLM Document API çağrılıyor...');
+        const docResult = await plmService.getDocumentUrl(itemId, docType);
+
+        if (!docResult.success) {
+            return res.status(500).json({
+                success: false,
+                error: 'Document URL alınamadı',
+                details: docResult.error
+            });
+        }
+
+        const excelUrl = docResult.url;
+        console.log('✅ Gerçek Excel URL alındı:', docResult.filename);
+        console.log('🔗 URL:', excelUrl);
+
+        // Artık normal flow ile devam et (Excel'i işle)
+        console.log('📊 Excel işleme başlıyor...');
+
+        // Excel'i indir
+        console.log('📥 ADIM 1: Excel dosyası indiriliyor...');
+        const response = await axios.get(excelUrl, { responseType: 'arraybuffer' });
+        console.log('✅ Excel indirildi, boyut:', response.data.length, 'bytes');
+
+        // Excel'i oku
+        console.log('📖 ADIM 2: Excel okunuyor...');
+        const workbook = XLSX.read(response.data, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: null });
+
+        if (jsonData.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Excel dosyası boş'
+            });
+        }
+
+        console.log(`✅ Excel okundu: ${jsonData.length} satır bulundu`);
+
+        // Validasyon
+        console.log('🔍 ADIM 3: Validasyon yapılıyor...');
+        
+        const headers = Object.keys(jsonData[0]);
+        const missingHeaders = REQUIRED_HEADERS.filter(h => !headers.includes(h));
+
+        if (missingHeaders.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Eksik başlık(lar) tespit edildi',
+                missingHeaders: missingHeaders,
+                receivedHeaders: headers
+            });
+        }
+
+        const emptyFieldRows = [];
+        jsonData.forEach((row, index) => {
+            const emptyFields = MANDATORY_FIELDS.filter(field => !row[field] || row[field].toString().trim() === '');
+            if (emptyFields.length > 0) {
+                emptyFieldRows.push({ row: index + 2, emptyFields });
+            }
+        });
+
+        if (emptyFieldRows.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Lütfen eksik bilgileri doldurunuz',
+                emptyFieldRows: emptyFieldRows
+            });
+        }
+
+        console.log('✅ Tüm validasyonlar başarılı');
+
+        // PLM ile eşleştir
+        console.log('🔗 ADIM 4: PLM ile eşleştirme yapılıyor...');
+        const plmResult = await plmService.processExcelDataWithPLM(jsonData);
+
+        if (!plmResult.success) {
+            return res.status(500).json({
+                success: false,
+                error: 'PLM eşleştirme hatası',
+                details: plmResult.error
+            });
+        }
+
+        console.log('✅ PLM eşleştirme tamamlandı');
+
+        // PLM'e yaz (SKU oluştur)
+        console.log('💾 ADIM 5: TrimSKU oluşturuluyor...');
+        const writeResult = await plmService.writeMatchedDataToPLM(plmResult.matchedData);
+
+        if (!writeResult.success) {
+            return res.status(500).json({
+                success: false,
+                error: 'PLM yazma hatası',
+                details: writeResult.error
+            });
+        }
+
+        console.log('✅ TrimSKU oluşturma tamamlandı');
+
+        // Oluşturulan SKU'ların ID'lerini al
+        console.log('🔎 ADIM 6: Oluşturulan SKU ID\'leri alınıyor...');
+        const trimIds = [...new Set(plmResult.matchedData.map(item => item.TrimId))];
+        const fetchSkusResult = await plmService.fetchCreatedSKUs(trimIds);
+
+        if (!fetchSkusResult.success) {
+            return res.status(500).json({
+                success: false,
+                error: 'SKU ID alma hatası',
+                details: fetchSkusResult.error
+            });
+        }
+
+        console.log('✅ SKU ID\'leri alındı');
+
+        // Excel verileri ile SKU'ları eşleştir
+        console.log('🔗 ADIM 7: Excel verileri ile SKU\'lar eşleştiriliyor...');
+        const matchedSkus = plmService.matchExcelWithSKUs(plmResult.matchedData, fetchSkusResult.skus);
+        console.log('✅ Eşleştirme tamamlandı');
+
+        // Barcode'ları ata
+        console.log('🏷️ ADIM 8: Barcode\'lar atanıyor...');
+        const barcodeResult = await plmService.assignBarcodesToSKUs(matchedSkus);
+
+        if (!barcodeResult.success) {
+            return res.status(500).json({
+                success: false,
+                error: 'Barcode atama hatası',
+                details: barcodeResult.error
+            });
+        }
+
+        console.log('✅ Barcode atama tamamlandı');
+        console.log('======================================================================');
+        console.log('🎉 XML İŞLEME BAŞARIYLA TAMAMLANDI!');
+        console.log('======================================================================');
+
+        // Başarılı response
+        res.json({
+            success: true,
+            message: 'XML işleme ve PLM yazma işlemi başarıyla tamamlandı',
+            xmlInfo: {
+                itemId: itemId,
+                docType: docType,
+                filename: docResult.filename,
+                documentKey: docResult.key
+            },
+            summary: {
+                totalRows: jsonData.length,
+                matchedRows: plmResult.matchedData.length,
+                unmatchedRows: plmResult.unmatchedData.length,
+                createdSKUs: writeResult.results.filter(r => r.success).length,
+                failedSKUs: writeResult.results.filter(r => !r.success).length,
+                assignedBarcodes: barcodeResult.results.filter(r => r.success).length,
+                failedBarcodes: barcodeResult.results.filter(r => !r.success).length
+            },
+            details: {
+                matched: plmResult.matchedData,
+                unmatched: plmResult.unmatchedData,
+                skuResults: writeResult.results,
+                barcodeResults: barcodeResult.results
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Hata:', error.message);
+        if (error.stack) {
+            console.error('Stack:', error.stack);
+        }
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
  * @swagger
  * /:
  *   get:
@@ -651,7 +901,8 @@ app.get('/', (req, res) => {
     swagger: 'https://trimskuopener-4b8505224c7d.herokuapp.com/api-docs',
     endpoints: {
       health: 'GET /api/health',
-      fullProcess: 'POST /api/process-and-write-to-plm'
+      fullProcess: 'POST /api/process-and-write-to-plm',
+      xmlProcess: 'POST /api/process-xml'
     }
   });
 });
