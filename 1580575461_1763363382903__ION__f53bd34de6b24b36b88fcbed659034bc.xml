@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?><SyncContentDocument xmlns="http://schema.infor.com/InforOAGIS/2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" releaseID="9.2" versionID="2.12.0" xsi:schemaLocation="http://schema.infor.com/InforOAGIS/2 http://schema.infor.com/InforOAGIS/BODs/SyncContentDocument.xsd"><ApplicationArea>
+    <Sender>
+        <LogicalID>lid://infor.daf.daf</LogicalID>
+        <ConfirmationCode>OnError</ConfirmationCode>
+    </Sender>
+    <CreationDateTime>2025-11-17T07:09:43.309Z</CreationDateTime>
+    <BODID>infor.daf.daf:1763363383309:166017363?ContentDocument&amp;verb=Sync</BODID>
+</ApplicationArea><DataArea><Sync>
+    <ActionCriteria>
+        <ActionExpression actionCode="Replace"/>
+    </ActionCriteria>
+</Sync><ContentDocument>
+    <DocumentID>
+        <ID variationID="1763363383270">TrimBarcode-3-0-LATEST</ID>
+    </DocumentID>
+    <AlternateDocumentID>
+        <ID>/TrimBarcode[@ITEMID = "3"]</ID>
+    </AlternateDocumentID>
+    <LastModificationDateTime>2025-11-17T07:09:39.861Z</LastModificationDateTime>
+    <LastModificationPerson>
+        <IDs>
+            <ID/>
+        </IDs>
+        <Name>E685B1F7-F06C-44AA-853F-A37778C97D8E</Name>
+    </LastModificationPerson>
+    <DocumentDateTime>2025-11-17T07:09:43.270Z</DocumentDateTime>
+    <CreationDateTime>2025-11-17T07:01:10.347Z</CreationDateTime>
+    <CreationPerson>
+        <IDs>
+            <ID/>
+        </IDs>
+        <Name>E685B1F7-F06C-44AA-853F-A37778C97D8E</Name>
+    </CreationPerson>
+    <Version>3</Version>
+    <Status>
+        <Code listID="Content Document Status">Updated</Code>
+        <EffectiveDateTime>Mon Nov 17 07:09:43 UTC 2025</EffectiveDateTime>
+        <ArchiveIndicator>false</ArchiveIndicator>
+    </Status>
+    <DocumentMetaData>
+        <DocumentTypeID>TrimBarcode</DocumentTypeID>
+        <Attribute id="Durum">
+            <RepresentativeIndicator>false</RepresentativeIndicator>
+            <AttributeType listID="Attribute Data Types">Short</AttributeType>
+            <IntegerAttributeValue>20</IntegerAttributeValue>
+        </Attribute>
+        <Attribute id="MDS_ID">
+            <RepresentativeIndicator>false</RepresentativeIndicator>
+            <AttributeType listID="Attribute Data Types">String</AttributeType>
+            <AttributeValue>cb289772-413f-484a-a3ce-73c31801bb00</AttributeValue>
+        </Attribute>
+    </DocumentMetaData>
+    <DocumentResource type="">
+        <FileSize>9341</FileSize>
+        <MimeType>application/vnd.openxmlformats-officedocument.spreadsheetml.sheet</MimeType>
+        <FileName>TrimUpt (1).xlsx</FileName>
+        <URL>https://idm.eu1.inforcloudsuite.com/ca/api/resources/TrimBarcode-3-3-LATEST?$token=AZPzCyW2yN7QPFGhcAnyUdbYJr7gPEI9EPmKBHttlcPNu%2FsIzlVNJvKrxA9CONqrKVDtey%2BP%2B1%2BxeJNl3DbQUnxx%2F%2BtY%2BMNsBkVl80ZKYtvFrS4GWanNkaMA0r6hO8QJk9NJiYrW00y76GS45%2Ft0fpuGP%2Bd8ZEjGHCl0%2FbVom1NISlrgp7T10zyzqq1yO4U2P4ukLkBYRVjn1tE2HnrojFGDE28L14DKTHp8IDzCDs4XGBVMbPQmc6SrgegIiVs019e3iBXp9kGp8%2BUqL45OhBZGun11wPQrZf6FyWvlAZuTQySINlqVuWdqo%2BBRu0GnbC37H6%2FxS1X4O6ps7TbSJcA2MxkCqHYeqNAfDOqbsCz1hsncrMOqG12%2F9YTF3VUI42NmkEj8&amp;$tenant=JKARFH4LCGZA78A5_PRD</URL>
+        <SHA256Hash>edceaad6a2c5bd8ba4fcb5f7f5b7943595d6cfaadc665f52ed67222ec4d261a5</SHA256Hash>
+    </DocumentResource>
+    <DocumentResource type="Preview">
+        <MimeType>image/png</MimeType>
+        <FileName>TrimBarcode-3-3-LATEST_Preview.png</FileName>
+        <URL>https://idm.eu1.inforcloudsuite.com/ca/api/resources/TrimBarcode-3-3-LATEST/Preview?$token=AZHO%2B5AtzI%2FAw1cX6snXhykIbpaM4Usn6WPD1yRHvLB3SqGqhILcEExJgWEQXQX2sGvxuR8puXfYGVISi6YIaTbNhjnd6nHdkzw%2Bon%2BIhx86qNNtizhBJSEP4kW2so3WHGx59RkVvGQDzqefmJn5K7AlUauZtK9csGZBwFHIqXgXoMMz7%2FaWFILpXrRToEtE5F3deLNisSzahKRsHc9ctMd8l%2Bt3FsGoeXthkRsLIZKTHPlCtbuPWiQ6t4RRjPRw8a7Wo2s0UG2e0Ew8NyUtFiaoglmyopeXhGrvXBCYnFjeXoSVhD4UctxhUljuQNSKeZTa%2F7Q%2FutRVVh72E9u6Ye6dn%2FmE9X27qpEFkVlLQEp7fEXW0CsUMtBah5OuSGpur%2BZ2C5M4&amp;$tenant=JKARFH4LCGZA78A5_PRD</URL>
+    </DocumentResource>
+    <DocumentResource type="SmallPreview">
+        <MimeType>image/png</MimeType>
+        <FileName>TrimBarcode-3-3-LATEST_SmallPreview.png</FileName>
+        <URL>https://idm.eu1.inforcloudsuite.com/ca/api/resources/TrimBarcode-3-3-LATEST/SmallPreview?$token=AVcp8Jejrsp6dZ4z6Q8ebxVndj2z1kkEPXfmVQP70ej2nHU%2BjS1z1dvhTQvr9MkjERYRk9QSnPIFduzasIqwSHzHd7FL5YgC6Pvp7rkcE0jM2LkO3JVBCIx3gmCdf1a0oRE%2BxWcduox4bQ89LyeMVNa7bJH%2FN8Gmvtzz99Xxqa7gUBUgTwI3MFH0KzncJ3f2%2FvfdiyIkM%2FE9%2ByGsulFhYlXfxI3K8bGVBwzl0F7cIL0NOSVhjBgRoOcUfHuIdKYTF8aGr1Hev%2BfCPySB4aZuAybIzO7vNNYr5TO25Z2mISIzCjJ6BKkzXecSCwYuEFdS96kS4hFNScVlsbhf%2BIuEOY9vy8zP%2F2izJ%2FdbmpKHEYV9SujrP0GyXGAeZB4imXAB1xeB1j3c&amp;$tenant=JKARFH4LCGZA78A5_PRD</URL>
+    </DocumentResource>
+    <DocumentResource type="Thumbnail">
+        <MimeType>image/png</MimeType>
+        <FileName>TrimBarcode-3-3-LATEST_Thumbnail.png</FileName>
+        <URL>https://idm.eu1.inforcloudsuite.com/ca/api/resources/TrimBarcode-3-3-LATEST/Thumbnail?$token=AW%2FnQKhfgWo8xACyrahZKwqY5gN42rfU3VzpfuZ0IMyT7%2FwMEw8DRw5il6UN4wnOpWnCCC9e7OHb0fVFPxpWd%2BY8JtXkaXg63U4FYFbksWC59w6vjNA9xgQe1cUXXsX02lBp9T0zproR8cuuZpE%2BAcMJRzMUxjEYAU2d8C11ZnD3TdfN2CdxzGQF1cCrnbcaREKos2HX6mYk8UN%2BmiuA%2FMF49f3IvGrO%2BFz%2FuEWtQOWne4uyHFoydTZLpT4pFKER1VtlyjKXDVKlVAdrnusg6OwlhGuXifwLLpy6a0LhrBYnEH3dnvjtgzGGDAPRV88pfXOiPyEc2ST1wNJPZ1aZdLjEp7PHU8O1YrzeRF1k7RyBp%2FnViyy9sW8fybjPkMNxbm0fL2oZ&amp;$tenant=JKARFH4LCGZA78A5_PRD</URL>
+    </DocumentResource>
+    <AccessControlListID>Public</AccessControlListID>
+</ContentDocument></DataArea></SyncContentDocument>

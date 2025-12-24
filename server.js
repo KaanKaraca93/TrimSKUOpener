@@ -21,6 +21,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.text({ type: 'application/xml' })); // XML desteği
 
+// Timeout artırma (büyük listeler için)
+app.use((req, res, next) => {
+    req.setTimeout(300000); // 5 dakika
+    res.setTimeout(300000); // 5 dakika
+    next();
+});
+
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
   customCss: '.swagger-ui .topbar { display: none }',
@@ -49,7 +56,7 @@ app.post('/api/read-excel', async (req, res) => {
     // Excel dosyasını URL'den indir
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
-      timeout: 30000, // 30 saniye timeout
+      timeout: 60000, // 60 saniye timeout
       headers: {
         'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel, */*'
       }
@@ -193,7 +200,7 @@ app.post('/api/process-excel-with-plm', async (req, res) => {
     // Excel dosyasını URL'den indir
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
-      timeout: 30000,
+      timeout: 60000, // 60 saniye
       headers: {
         'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel, */*'
       }
@@ -401,7 +408,7 @@ app.post('/api/process-and-write-to-plm', async (req, res) => {
     console.log('\n📥 ADIM 1: Excel dosyası indiriliyor...');
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
-      timeout: 30000,
+      timeout: 60000, // 60 saniye
       headers: {
         'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel, */*'
       }
@@ -710,7 +717,10 @@ app.post('/api/process-xml', async (req, res) => {
 
         // Excel'i indir
         console.log('📥 ADIM 1: Excel dosyası indiriliyor...');
-        const response = await axios.get(excelUrl, { responseType: 'arraybuffer' });
+        const response = await axios.get(excelUrl, { 
+            responseType: 'arraybuffer',
+            timeout: 60000 // 60 saniye
+        });
         console.log('✅ Excel indirildi, boyut:', response.data.length, 'bytes');
 
         // Excel'i oku

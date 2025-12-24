@@ -22,7 +22,8 @@ async function getToken() {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'Accept': 'application/json'
-                }
+                },
+                timeout: 30000 // 30 saniye
             }
         );
         
@@ -73,7 +74,8 @@ async function getTrimsWithDetails(trimCodes) {
                 'Authorization': `Bearer ${token}`,
                 'X-Infor-Tenantid': PLM_CONFIG.TENANT,
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 60000 // 60 saniye
         });
 
         const trims = response.data?.value;
@@ -319,7 +321,8 @@ async function saveTrimSKUs(trimId, skuList) {
                     'Authorization': `Bearer ${token}`,
                     'X-Infor-Tenantid': PLM_CONFIG.TENANT,
                     'Content-Type': 'application/json'
-                }
+                },
+                timeout: 60000 // 60 saniye
             }
         );
 
@@ -464,7 +467,8 @@ async function fetchCreatedSKUs(trimIds) {
                 'Authorization': `Bearer ${token}`,
                 'X-Infor-Tenantid': PLM_CONFIG.TENANT,
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 60000 // 60 saniye
         });
 
         const skus = response.data?.value || [];
@@ -567,7 +571,8 @@ async function updateSKUBarcode(skuId, barcode) {
                     'Authorization': `Bearer ${token}`,
                     'X-Infor-Tenantid': PLM_CONFIG.TENANT,
                     'Content-Type': 'application/json'
-                }
+                },
+                timeout: 30000 // 30 saniye
             }
         );
 
@@ -603,8 +608,9 @@ async function assignBarcodesToSKUs(matchedData) {
     for (const item of matchedData) {
         const skuId = item.plmData.skuId;
         const barcode = item.excelData.barcode;
+        const currentIndex = matchedData.indexOf(item) + 1;
 
-        console.log(`\n   📌 SKU ${skuId} güncelleniyor... (Barkod: ${barcode})`);
+        console.log(`\n   📌 [${currentIndex}/${matchedData.length}] SKU ${skuId} güncelleniyor... (Barkod: ${barcode})`);
 
         const result = await updateSKUBarcode(skuId, barcode);
 
@@ -635,7 +641,7 @@ async function assignBarcodesToSKUs(matchedData) {
 
         // API rate limiting için küçük bir bekleme
         if (matchedData.indexOf(item) < matchedData.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 200)); // 200ms'ye çıkardık
         }
     }
 
@@ -690,7 +696,8 @@ async function getDocumentUrl(itemId, docType) {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
-                }
+                },
+                timeout: 30000 // 30 saniye
             }
         );
 
