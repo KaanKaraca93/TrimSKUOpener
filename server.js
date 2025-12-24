@@ -8,7 +8,9 @@ const XLSX = require('xlsx');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const { XMLParser } = require('fast-xml-parser');
+const { v4: uuidv4 } = require('uuid');
 const plmService = require('./plm-service');
+const db = require('./db');
 
 // Load Swagger YAML
 const swaggerDocument = YAML.load('./swagger.yaml');
@@ -922,19 +924,193 @@ app.get('/', (req, res) => {
     endpoints: {
       health: 'GET /api/health',
       fullProcess: 'POST /api/process-and-write-to-plm',
-      xmlProcess: 'POST /api/process-xml'
+      xmlProcess: 'POST /api/process-xml',
+      asyncXmlProcess: 'POST /api/process-xml-async',
+      jobStatus: 'GET /api/job-status/:jobId'
     }
   });
 });
 
+// =============================================================================
+// ASYNC ENDPOINTS (Production - Worker Dyno ile çalışır)
+// =============================================================================
+
+/**
+ * @route POST /api/process-xml-async
+ * @desc XML işleme (Async - Job ID döner, worker işler)
+ * @access Public
+ */
+app.post('/api/process-xml-async', async (req, res) => {
+    try {
+        const xmlData = req.body;
+        
+        if (!xmlData || typeof xmlData !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'XML verisi gereklidir'
+            });
+        }
+
+        console.log('\n📥 Async XML işlem talebi alındı');
+        console.log('📦 XML boyutu:', xmlData.length, 'karakter');
+
+        // XML'i parse et
+        const parser = new XMLParser({
+            ignoreAttributes: false,
+            attributeNamePrefix: '@_'
+        });
+        
+        const jsonObj = parser.parse(xmlData);
+
+        // AlternateDocumentID'den ItemID çıkar
+        const alternateDocId = jsonObj?.DocumentRevisionUpdate?.AlternateDocumentID;
+        if (!alternateDocId) {
+            return res.status(400).json({
+                success: false,
+                error: 'AlternateDocumentID bulunamadı'
+            });
+        }
+
+        const itemIdMatch = alternateDocId.match(/ITEMID="([^"]+)"/);
+        if (!itemIdMatch) {
+            return res.status(400).json({
+                success: false,
+                error: 'ITEMID AlternateDocumentID içinde bulunamadı'
+            });
+        }
+        const itemId = itemIdMatch[1];
+
+        // DocumentTypeID'yi al
+        const docTypeId = jsonObj?.DocumentRevisionUpdate?.DocumentMetaData?.DocumentTypeID;
+        if (!docTypeId) {
+            return res.status(400).json({
+                success: false,
+                error: 'DocumentTypeID bulunamadı'
+            });
+        }
+
+        console.log(`✅ ITEMID: ${itemId}`);
+        console.log(`✅ DocumentTypeID: ${docTypeId}`);
+
+        // Document URL'i al (Excel URL'i)
+        console.log('📄 Document URL alınıyor...');
+        const docResult = await plmService.getDocumentUrl(itemId, docTypeId);
+        
+        if (!docResult.success) {
+            return res.status(400).json({
+                success: false,
+                error: 'Document URL alınamadı',
+                details: docResult.error
+            });
+        }
+
+        const excelUrl = docResult.url;
+        console.log(`✅ Excel URL alındı: ${docResult.filename}`);
+
+        // Job oluştur
+        const jobId = uuidv4();
+        await db.createJob(jobId, xmlData, excelUrl, itemId, docTypeId);
+
+        console.log(`✅ Job oluşturuldu: ${jobId}`);
+        console.log(`📊 Worker dyno bu job'u işleyecek`);
+
+        // Hemen response dön
+        return res.status(202).json({
+            success: true,
+            message: 'İşlem alındı, arka planda işleniyor',
+            jobId: jobId,
+            statusUrl: `/api/job-status/${jobId}`,
+            estimatedTime: '2-5 dakika'
+        });
+
+    } catch (error) {
+        console.error('❌ Async XML işleme hatası:', error.message);
+        return res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * @route GET /api/job-status/:jobId
+ * @desc Job durumunu sorgula
+ * @access Public
+ */
+app.get('/api/job-status/:jobId', async (req, res) => {
+    try {
+        const { jobId } = req.params;
+
+        const job = await db.getJob(jobId);
+
+        if (!job) {
+            return res.status(404).json({
+                success: false,
+                error: 'Job bulunamadı',
+                jobId: jobId
+            });
+        }
+
+        // Status'e göre response hazırla
+        const response = {
+            success: true,
+            jobId: job.id,
+            status: job.status,
+            createdAt: job.created_at,
+            updatedAt: job.updated_at
+        };
+
+        if (job.status === 'processing') {
+            response.progress = {
+                totalRows: job.total_rows,
+                processedRows: job.processed_rows,
+                currentStep: job.current_step
+            };
+        }
+
+        if (job.status === 'completed') {
+            response.completedAt = job.completed_at;
+            response.result = job.result;
+        }
+
+        if (job.status === 'failed') {
+            response.error = job.error;
+        }
+
+        return res.json(response);
+
+    } catch (error) {
+        console.error('❌ Job status sorgulama hatası:', error.message);
+        return res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 // Server'ı başlat
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log('='.repeat(70));
   console.log(`🚀 Server ${PORT} portunda çalışıyor`);
   console.log(`📍 http://localhost:${PORT}`);
   console.log(`📚 Swagger UI: http://localhost:${PORT}/api-docs`);
   console.log(`💚 Sağlık kontrolü: http://localhost:${PORT}/api/health`);
   console.log('='.repeat(70));
+  
+  // Database'i initialize et
+  try {
+    await db.initializeDatabase();
+  } catch (error) {
+    console.error('⚠️ Database initialization başarısız:', error.message);
+    console.log('ℹ️  Async endpoints DATABASE_URL olmadan çalışmayacak');
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('⏹️  SIGTERM sinyali alındı, graceful shutdown başlıyor...');
+  await db.closePool();
+  process.exit(0);
 });
 
 module.exports = app;

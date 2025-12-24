@@ -21,6 +21,8 @@ tags:
     description: Excel işleme ve PLM entegrasyonu
   - name: XML Processing
     description: XML ile Excel işleme ve PLM entegrasyonu
+  - name: Async Processing
+    description: Async (Worker Dyno) ile işleme - Production için (1000+ satır)
 
 paths:
   /:
@@ -563,4 +565,219 @@ components:
                   type: string
                 description: Boş olan zorunlu alanlar
           description: Detaylı hata listesi (validasyon hatası durumunda)
+
+  /api/process-xml-async:
+    post:
+      summary: XML İşleme (ASYNC - Production için)
+      description: |
+        **ASYNC İŞLEM - WORKER DYNO İLE ÇALIŞIR**
+        
+        XML verisi ile Excel URL'i alır, job oluşturur ve hemen 202 Accepted döner.
+        İşlem arka planda Worker Dyno tarafından gerçekleştirilir.
+        
+        **Kullanım:**
+        1. Bu endpoint'e XML gönder
+        2. 202 Accepted + jobId al
+        3. `/api/job-status/:jobId` ile durumu kontrol et
+        
+        **Avantajlar:**
+        - ✅ 1000+ satırlık listeler işlenebilir
+        - ✅ 4-5 dakikalık işlemler timeout olmaz
+        - ✅ Production-ready
+        
+        **Gereksinimler:**
+        - ✅ Heroku Postgres (DATABASE_URL)
+        - ✅ Worker Dyno (`heroku ps:scale worker=1`)
+      tags:
+        - Async Processing
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              type: string
+              example: |
+                <DocumentRevisionUpdate>
+                  <AlternateDocumentID>TYPE="ITEMS", ITEMID="2"</AlternateDocumentID>
+                  <DocumentMetaData>
+                    <DocumentTypeID>TrimBarcode</DocumentTypeID>
+                  </DocumentMetaData>
+                </DocumentRevisionUpdate>
+      responses:
+        '202':
+          description: İşlem alındı, arka planda işleniyor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "İşlem alındı, arka planda işleniyor"
+                  jobId:
+                    type: string
+                    example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  statusUrl:
+                    type: string
+                    example: "/api/job-status/a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  estimatedTime:
+                    type: string
+                    example: "2-5 dakika"
+        '400':
+          description: Hatalı istek
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Sunucu hatası
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/job-status/{jobId}:
+    get:
+      summary: Job Durumu Sorgula
+      description: |
+        Async işleme gönderilen job'un durumunu sorgular.
+        
+        **Status Değerleri:**
+        - `pending`: İşlem bekliyor (worker henüz almadı)
+        - `processing`: İşlem devam ediyor
+        - `completed`: İşlem tamamlandı
+        - `failed`: İşlem başarısız
+        
+        **Polling:** 
+        PLM tarafından 5-10 saniyede bir kontrol edilmeli.
+      tags:
+        - Async Processing
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+          description: Job ID (process-xml-async'den dönen)
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      responses:
+        '200':
+          description: Job durumu
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    description: Pending status
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      jobId:
+                        type: string
+                      status:
+                        type: string
+                        example: "pending"
+                      createdAt:
+                        type: string
+                        format: date-time
+                      updatedAt:
+                        type: string
+                        format: date-time
+                  - type: object
+                    description: Processing status
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      jobId:
+                        type: string
+                      status:
+                        type: string
+                        example: "processing"
+                      createdAt:
+                        type: string
+                        format: date-time
+                      updatedAt:
+                        type: string
+                        format: date-time
+                      progress:
+                        type: object
+                        properties:
+                          totalRows:
+                            type: integer
+                            example: 1000
+                          processedRows:
+                            type: integer
+                            example: 450
+                          currentStep:
+                            type: string
+                            example: "Barkodlar atanıyor... (450/1000)"
+                  - type: object
+                    description: Completed status
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      jobId:
+                        type: string
+                      status:
+                        type: string
+                        example: "completed"
+                      createdAt:
+                        type: string
+                        format: date-time
+                      updatedAt:
+                        type: string
+                        format: date-time
+                      completedAt:
+                        type: string
+                        format: date-time
+                      result:
+                        type: object
+                        description: İşlem sonucu (process-xml response'u ile aynı)
+                  - type: object
+                    description: Failed status
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      jobId:
+                        type: string
+                      status:
+                        type: string
+                        example: "failed"
+                      createdAt:
+                        type: string
+                        format: date-time
+                      updatedAt:
+                        type: string
+                        format: date-time
+                      error:
+                        type: string
+                        example: "PLM eşleştirme hatası: Trim kodu bulunamadı"
+        '404':
+          description: Job bulunamadı
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Job bulunamadı"
+                  jobId:
+                    type: string
+        '500':
+          description: Sunucu hatası
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
