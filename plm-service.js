@@ -96,8 +96,16 @@ async function getTrimsWithDetails(trimCodes) {
                 : null;
             
             // ✅ Mevcut SKU'ları da map'e ekle
-            const existingSKUs = trim.TrimSKU || [];
+            // NOT: PLM response'unda hem 'TrimSKU' hem 'TrimSku' olabilir (case sensitive!)
+            const existingSKUs = trim.TrimSKU || trim.TrimSku || [];
             console.log(`   📦 ${trim.Code}: ${existingSKUs.length} mevcut SKU bulundu`);
+            
+            // DEBUG: Mevcut SKU'ları logla
+            if (existingSKUs.length > 0) {
+                console.log(`      Mevcut SKU'lar:`, existingSKUs.map(s => 
+                    `SkuId=${s.SkuId}, ColorMasterId=${s.ColorMasterId}, MakeSizeId=${s.MakeSizeId}`
+                ).join(' | '));
+            }
             
             trimMap[trim.Code] = {
                 trimId: trim.Id,
@@ -404,13 +412,24 @@ async function writeMatchedDataToPLM(matchedResults) {
             const trimResults = matchedResults.filter(r => r.plmData.trimId === parseInt(trimId));
             
             group.skus.forEach(sku => {
-                const exists = group.existingSKUs.find(existing => 
-                    existing.ColorMasterId === sku.colorMasterId &&
-                    existing.MakeSizeId === sku.makeSizeId
-                );
+                // DEBUG: Excel'den gelen kombinasyonu logla
+                console.log(`   🔍 Kontrol: ColorMasterId=${sku.colorMasterId}, MakeSizeId=${sku.makeSizeId}`);
+                
+                // Mevcut SKU'larda bu kombinasyon var mı?
+                const exists = group.existingSKUs.find(existing => {
+                    const colorMatch = existing.ColorMasterId === sku.colorMasterId;
+                    const sizeMatch = existing.MakeSizeId === sku.makeSizeId;
+                    
+                    // DEBUG: Her karşılaştırmayı logla
+                    if (colorMatch || sizeMatch) {
+                        console.log(`      → Mevcut SKU: ColorMasterId=${existing.ColorMasterId}, MakeSizeId=${existing.MakeSizeId} | Match: Color=${colorMatch}, Size=${sizeMatch}`);
+                    }
+                    
+                    return colorMatch && sizeMatch;
+                });
 
                 if (exists) {
-                    console.log(`   ⚠️  ATLA: ColorMasterId=${sku.colorMasterId}, MakeSizeId=${sku.makeSizeId} → SkuId=${exists.SkuId} (Zaten var)`);
+                    console.log(`   ⚠️  ATLA: SkuId=${exists.SkuId} (Zaten var)`);
                     
                     // ✅ Tam Excel satır bilgisini bul ve ekle
                     const matchedRow = trimResults.find(r => 
@@ -429,7 +448,7 @@ async function writeMatchedDataToPLM(matchedResults) {
                         });
                     }
                 } else {
-                    console.log(`   ✅ YENİ: ColorMasterId=${sku.colorMasterId}, MakeSizeId=${sku.makeSizeId} → Yaratılacak`);
+                    console.log(`   ✅ YENİ: Yaratılacak (mevcut SKU'larda bu kombinasyon yok)`);
                     newSKUs.push(sku);
                 }
             });
