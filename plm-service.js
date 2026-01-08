@@ -49,11 +49,11 @@ async function getToken() {
 
 /**
  * Birden fazla Trim Kodu için toplu PLM sorgusu
- * Performans için tüm trim'leri tek sorguda çeker
+ * Performans için tüm trim'leri tek sorguda çeker (MEVCUT SKU'lar dahil)
  */
 async function getTrimsWithDetails(trimCodes) {
     try {
-        console.log(`\n🔍 ${trimCodes.length} adet Trim sorgulanıyor...`);
+        console.log(`\n🔍 ${trimCodes.length} adet Trim sorgulanıyor (mevcut SKU'lar ile birlikte)...`);
         console.log(`   Trim Kodları: ${trimCodes.join(', ')}`);
         
         // Token al
@@ -64,9 +64,10 @@ async function getTrimsWithDetails(trimCodes) {
 
         const token = tokenResult.token;
         
-        // IN operatörü ile tüm trim'leri tek sorguda çek (Size bilgileriyle birlikte)
+        // IN operatörü ile tüm trim'leri tek sorguda çek
+        // ✅ TrimSKU expand eklendi - mevcut SKU'ları da çekiyoruz!
         const trimCodesFormatted = trimCodes.map(code => `'${code}'`).join(',');
-        const trimApiUrl = `${PLM_CONFIG.BASE_API_URL}/odata2/api/odata2/Trim?$filter=Code in (${trimCodesFormatted})&$expand=TrimColorways($select=TrimColorwayId,Code),TrimSizeRange($select=TrimId,Id,SizeRangeId;$expand=TrimSizes($select=SizeId;$expand=Size($select=SizeId,SizeCode)))&$select=Id,Code`;
+        const trimApiUrl = `${PLM_CONFIG.BASE_API_URL}/odata2/api/odata2/Trim?$filter=Code in (${trimCodesFormatted})&$expand=TrimColorways($select=TrimColorwayId,Code),TrimSizeRange($select=TrimId,Id,SizeRangeId;$expand=TrimSizes($select=SizeId;$expand=Size($select=SizeId,SizeCode))),TrimSKU&$select=Id,Code`;
         
         console.log('📡 PLM API çağrısı yapılıyor...');
         const response = await axios.get(trimApiUrl, {
@@ -94,12 +95,17 @@ async function getTrimsWithDetails(trimCodes) {
                 ? trim.TrimSizeRange[0] 
                 : null;
             
+            // ✅ Mevcut SKU'ları da map'e ekle
+            const existingSKUs = trim.TrimSKU || [];
+            console.log(`   📦 ${trim.Code}: ${existingSKUs.length} mevcut SKU bulundu`);
+            
             trimMap[trim.Code] = {
                 trimId: trim.Id,
                 trimCode: trim.Code,
                 colorways: trim.TrimColorways || [],
                 sizeRange: sizeRangeData,
-                sizes: sizeRangeData?.TrimSizes || []
+                sizes: sizeRangeData?.TrimSizes || [],
+                existingSKUs: existingSKUs // ✅ Mevcut SKU'lar eklendi
             };
         });
 
@@ -231,7 +237,8 @@ async function processExcelDataWithPLM(excelRows) {
                         sizeId: sizeData?.SizeId || null,
                         trim: {
                             trimId: trimData.trimId,
-                            trimCode: trimData.trimCode
+                            trimCode: trimData.trimCode,
+                            existingSKUs: trimData.existingSKUs || [] // ✅ Mevcut SKU'ları ekle
                         },
                         colorway: {
                             trimColorwayId: colorway.TrimColorwayId,
@@ -349,6 +356,7 @@ async function saveTrimSKUs(trimId, skuList) {
 
 /**
  * Excel'den okunan ve eşleştirilen verileri PLM'e yaz
+ * ✅ DUPLICATE KONTROLÜ: Mevcut SKU'ları kontrol eder, sadece yeni kombinasyonları yaratır
  */
 async function writeMatchedDataToPLM(matchedResults) {
     try {
@@ -362,6 +370,7 @@ async function writeMatchedDataToPLM(matchedResults) {
             if (!trimGroups[trimId]) {
                 trimGroups[trimId] = {
                     trimCode: result.excelData.trimCode,
+                    existingSKUs: result.plmData.trim.existingSKUs || [], // ✅ Mevcut SKU'ları al
                     skus: []
                 };
             }
@@ -375,60 +384,111 @@ async function writeMatchedDataToPLM(matchedResults) {
         });
 
         const trimIds = Object.keys(trimGroups);
-        console.log(`\n🔍 ${trimIds.length} farklı Trim için SKU yazılacak\n`);
+        console.log(`\n🔍 ${trimIds.length} farklı Trim için SKU kontrol edilecek\n`);
 
         const results = [];
         const errors = [];
+        const skippedSKUs = []; // ✅ Zaten var olan SKU'lar
 
-        // Her Trim için SKU'ları yaz
+        // Her Trim için SKU'ları kontrol et ve yaz
         for (const trimId of trimIds) {
             const group = trimGroups[trimId];
             console.log(`\n📝 Trim: ${group.trimCode} (ID: ${trimId})`);
-            console.log(`   ${group.skus.length} adet SKU yazılacak`);
+            console.log(`   Excel'den gelen: ${group.skus.length} SKU`);
+            console.log(`   PLM'de mevcut: ${group.existingSKUs.length} SKU`);
 
-            try {
-                const saveResult = await saveTrimSKUs(parseInt(trimId), group.skus);
-                
-                if (saveResult.success) {
-                    results.push({
-                        trimId: parseInt(trimId),
-                        trimCode: group.trimCode,
-                        skuCount: group.skus.length,
-                        response: saveResult.data
-                    });
-                    console.log(`✅ ${group.trimCode} başarıyla yazıldı`);
+            // ✅ DUPLICATE KONTROLÜ: Sadece yeni kombinasyonları filtrele
+            const newSKUs = [];
+            
+            // matchedResults'tan ilgili satırları bul (tam Excel bilgisi için)
+            const trimResults = matchedResults.filter(r => r.plmData.trimId === parseInt(trimId));
+            
+            group.skus.forEach(sku => {
+                const exists = group.existingSKUs.find(existing => 
+                    existing.ColorMasterId === sku.colorMasterId &&
+                    existing.MakeSizeId === sku.makeSizeId
+                );
+
+                if (exists) {
+                    console.log(`   ⚠️  ATLA: ColorMasterId=${sku.colorMasterId}, MakeSizeId=${sku.makeSizeId} → SkuId=${exists.SkuId} (Zaten var)`);
+                    
+                    // ✅ Tam Excel satır bilgisini bul ve ekle
+                    const matchedRow = trimResults.find(r => 
+                        r.plmData.trimColorwayId === sku.colorMasterId &&
+                        r.plmData.sizeId === sku.makeSizeId
+                    );
+                    
+                    if (matchedRow) {
+                        skippedSKUs.push({
+                            ...matchedRow, // Excel data + PLM data
+                            existingSkuId: exists.SkuId, // ✅ Mevcut SkuId ekle
+                            plmData: {
+                                ...matchedRow.plmData,
+                                skuId: exists.SkuId // ✅ skuId'yi de ekle (barkod atama için)
+                            }
+                        });
+                    }
                 } else {
+                    console.log(`   ✅ YENİ: ColorMasterId=${sku.colorMasterId}, MakeSizeId=${sku.makeSizeId} → Yaratılacak`);
+                    newSKUs.push(sku);
+                }
+            });
+
+            console.log(`   → ${newSKUs.length} yeni SKU yaratılacak, ${group.skus.length - newSKUs.length} SKU zaten var`);
+
+            // Sadece yeni SKU'lar varsa yarat
+            if (newSKUs.length > 0) {
+                try {
+                    const saveResult = await saveTrimSKUs(parseInt(trimId), newSKUs);
+                    
+                    if (saveResult.success) {
+                        results.push({
+                            trimId: parseInt(trimId),
+                            trimCode: group.trimCode,
+                            skuCount: newSKUs.length,
+                            response: saveResult.data
+                        });
+                        console.log(`✅ ${group.trimCode}: ${newSKUs.length} yeni SKU başarıyla yazıldı`);
+                    } else {
+                        errors.push({
+                            trimId: parseInt(trimId),
+                            trimCode: group.trimCode,
+                            error: saveResult.error,
+                            details: saveResult.details
+                        });
+                        console.log(`❌ ${group.trimCode} yazılamadı: ${saveResult.error}`);
+                    }
+
+                } catch (error) {
                     errors.push({
                         trimId: parseInt(trimId),
                         trimCode: group.trimCode,
-                        error: saveResult.error,
-                        details: saveResult.details
+                        error: error.message
                     });
-                    console.log(`❌ ${group.trimCode} yazılamadı: ${saveResult.error}`);
+                    console.log(`❌ ${group.trimCode} yazılırken hata: ${error.message}`);
                 }
-
-            } catch (error) {
-                errors.push({
-                    trimId: parseInt(trimId),
-                    trimCode: group.trimCode,
-                    error: error.message
-                });
-                console.log(`❌ ${group.trimCode} yazılırken hata: ${error.message}`);
+            } else {
+                console.log(`✅ ${group.trimCode}: Tüm SKU'lar zaten mevcut, yeni yaratma yok`);
             }
         }
 
         console.log('\n' + '='.repeat(70));
-        console.log(`✅ PLM yazma tamamlandı: ${results.length} başarılı, ${errors.length} hata`);
+        console.log(`✅ PLM yazma tamamlandı:`);
+        console.log(`   ${results.length} Trim için yeni SKU yaratıldı`);
+        console.log(`   ${skippedSKUs.length} SKU zaten mevcuttu (atlandı)`);
+        console.log(`   ${errors.length} hata`);
         console.log('='.repeat(70));
 
         return {
-            success: results.length > 0,
+            success: results.length > 0 || skippedSKUs.length > 0,
             data: {
                 totalTrims: trimIds.length,
                 successfulTrims: results.length,
                 failedTrims: errors.length,
+                skippedSKUs: skippedSKUs.length,
                 results: results,
-                errors: errors
+                errors: errors,
+                skipped: skippedSKUs // ✅ Atlanan SKU'ları da döndür
             }
         };
 

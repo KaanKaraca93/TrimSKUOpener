@@ -131,49 +131,65 @@ async function processJob(job) {
         }
 
         console.log('✅ TrimSKU oluşturma tamamlandı');
+        console.log(`   ${writeResult.data.results.length} Trim için yeni SKU yaratıldı`);
+        console.log(`   ${writeResult.data.skippedSKUs} SKU zaten mevcuttu (atlandı)`);
 
-        // ADIM 6: SKU ID'lerini al
-        await db.updateJobStatus(jobId, 'processing', {
-            currentStep: 'SKU ID\'leri alınıyor...'
-        });
+        // ADIM 6: Yeni yaratılan SKU'ların ID'lerini al
+        let newSkusWithIds = [];
+        
+        if (writeResult.data.results.length > 0) {
+            await db.updateJobStatus(jobId, 'processing', {
+                currentStep: 'Yeni SKU ID\'leri alınıyor...'
+            });
 
-        console.log('🔎 ADIM 6: Oluşturulan SKU ID\'leri alınıyor...');
-        const trimIds = writeResult.data.results.map(r => r.trimId);
-        const fetchSkusResult = await plmService.fetchCreatedSKUs(trimIds);
+            console.log('🔎 ADIM 6: Yeni yaratılan SKU ID\'leri alınıyor...');
+            const trimIds = writeResult.data.results.map(r => r.trimId);
+            const fetchSkusResult = await plmService.fetchCreatedSKUs(trimIds);
 
-        if (!fetchSkusResult.success) {
-            throw new Error(`SKU ID alma hatası: ${fetchSkusResult.error}`);
+            if (!fetchSkusResult.success) {
+                throw new Error(`SKU ID alma hatası: ${fetchSkusResult.error}`);
+            }
+
+            console.log('✅ Yeni SKU ID\'leri alındı');
+
+            // ADIM 7: Yeni SKU'ları Excel ile eşleştir
+            await db.updateJobStatus(jobId, 'processing', {
+                currentStep: 'Yeni SKU\'lar Excel ile eşleştiriliyor...'
+            });
+
+            console.log('🔗 ADIM 7: Yeni SKU\'lar Excel ile eşleştiriliyor...');
+            const matchSkuResult = plmService.matchExcelWithSKUs(matchedData, fetchSkusResult.data);
+            newSkusWithIds = matchSkuResult.data.matchedData;
+            console.log('✅ Eşleştirme tamamlandı');
+        } else {
+            console.log('⚠️  ADIM 6-7: Yeni SKU yok, atlandı');
         }
 
-        console.log('✅ SKU ID\'leri alındı');
+        // ✅ Mevcut SKU'ları (skipped) ekle
+        const existingSkusWithIds = writeResult.data.skipped || [];
+        console.log(`📦 Mevcut SKU'lar: ${existingSkusWithIds.length}`);
+        
+        // ✅ TÜM SKU'ları birleştir (yeni + mevcut)
+        const allSkusForBarcode = [...newSkusWithIds, ...existingSkusWithIds];
+        console.log(`📊 Toplam ${allSkusForBarcode.length} SKU barcode için hazır`);
 
-        // ADIM 7: Excel verileri ile SKU'ları eşleştir
+        // ADIM 8: TÜM SKU'lara (yeni + mevcut) barcode ata
         await db.updateJobStatus(jobId, 'processing', {
-            currentStep: 'Excel verileri SKU\'larla eşleştiriliyor...'
+            currentStep: `Barkodlar atanıyor... (0/${allSkusForBarcode.length})`
         });
 
-        console.log('🔗 ADIM 7: Excel verileri ile SKU\'lar eşleştiriliyor...');
-        const matchSkuResult = plmService.matchExcelWithSKUs(matchedData, fetchSkusResult.data);
-        const matchedSkus = matchSkuResult.data.matchedData;
-        console.log('✅ Eşleştirme tamamlandı');
-        console.log(`📊 ${matchedSkus.length} SKU barcode için hazır`);
-
-        // ADIM 8: Barcode'ları ata
-        await db.updateJobStatus(jobId, 'processing', {
-            currentStep: `Barkodlar atanıyor... (0/${matchedSkus.length})`
-        });
-
-        console.log('🏷️ ADIM 8: Barcode\'lar atanıyor...');
+        console.log('🏷️ ADIM 8: TÜM SKU\'lara (yeni + mevcut) barcode atanıyor...');
+        console.log(`   Toplam: ${allSkusForBarcode.length} SKU`);
         
         // Progress tracking için custom function
         let processedBarcodes = 0;
         const barcodeResults = [];
         
-        for (const item of matchedSkus) {
+        for (const item of allSkusForBarcode) {
             const skuId = item.plmData.skuId;
             const barcode = item.excelData.barcode;
 
-            console.log(`\n   📌 [${processedBarcodes + 1}/${matchedSkus.length}] SKU ${skuId} güncelleniyor... (Barkod: ${barcode})`);
+            console.log(`\n   📌 [${processedBarcodes + 1}/${allSkusForBarcode.length}] SKU ${skuId} güncelleniyor... (Barkod: ${barcode})`);
 
             const result = await plmService.updateSKUBarcode(skuId, barcode);
 
@@ -199,15 +215,15 @@ async function processJob(job) {
             processedBarcodes++;
 
             // Progress güncelle (her 10 barkodda bir)
-            if (processedBarcodes % 10 === 0 || processedBarcodes === matchedSkus.length) {
+            if (processedBarcodes % 10 === 0 || processedBarcodes === allSkusForBarcode.length) {
                 await db.updateJobStatus(jobId, 'processing', {
-                    currentStep: `Barkodlar atanıyor... (${processedBarcodes}/${matchedSkus.length})`,
+                    currentStep: `Barkodlar atanıyor... (${processedBarcodes}/${allSkusForBarcode.length})`,
                     processedRows: processedBarcodes
                 });
             }
 
             // Rate limiting
-            if (processedBarcodes < matchedSkus.length) {
+            if (processedBarcodes < allSkusForBarcode.length) {
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
         }
